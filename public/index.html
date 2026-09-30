@@ -1,0 +1,177 @@
+const express = require('express');
+const http = require('http');
+const path = require('path');
+const crypto = require('crypto');
+const { Server } = require('socket.io');
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
+const PORT = process.env.PORT || 3000;
+
+const activeSessions = {};
+const dashboardState = {
+  widgets: [
+    {
+      id: 'welcome-widget',
+      title: 'Welcome',
+      content: 'This dashboard updates live for everyone on the same team.',
+      x: 40,
+      y: 40,
+      width: 280,
+      height: 180,
+      color: '#7c9cff',
+      updatedBy: 'System'
+    },
+    {
+      id: 'metrics-widget',
+      title: 'Team KPIs',
+      content: 'Revenue: $92.4k\nRetention: 96%\nSupport: 48 tickets',
+      x: 360,
+      y: 70,
+      width: 320,
+      height: 220,
+      color: '#53d8a2',
+      updatedBy: 'System'
+    },
+    {
+      id: 'notes-widget',
+      title: 'Notes',
+      content: 'Launch checklist:\n- Confirm stakeholders\n- Publish dashboard\n- Review metrics',
+      x: 720,
+      y: 140,
+      width: 280,
+      height: 200,
+      color: '#ffc857',
+      updatedBy: 'System'
+    }
+  ]
+};
+
+function generateToken() {
+  return crypto.randomBytes(16).toString('hex');
+}
+
+function getUserColor(name) {
+  const palette = ['#7c9cff', '#53d8a2', '#ff8a65', '#f7b267', '#f4d35e', '#aa8fd8', '#ff6b6b', '#5ec8ff'];
+  const index = name.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0) % palette.length;
+  return palette[index];
+}
+
+function broadcastState() {
+  io.to('dashboard').emit('dashboard-state', {
+    widgets: dashboardState.widgets,
+    users: Object.values(activeSessions)
+  });
+}
+
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true, message: 'Dashboard API is running' });
+});
+
+app.post('/api/login', (req, res) => {
+  const rawUsername = req.body?.username;
+  const rawPassword = req.body?.password;
+  const username = typeof rawUsername === 'string' ? rawUsername.trim() : '';
+  const password = typeof rawPassword === 'string' ? rawPassword.trim() : '';
+
+  if (!username) {
+    return res.status(400).json({ error: 'Username is required.' });
+  }
+
+  if (!password) {
+    return res.status(400).json({ error: 'Password is required.' });
+  }
+
+  const token = generateToken();
+  const user = {
+    id: token,
+    username,
+    color: getUserColor(username),
+    lastSeen: new Date().toISOString()
+  };
+
+  activeSessions[token] = user;
+  res.json({ token, user });
+});
+
+app.get('/api/dashboard', (req, res) => {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+
+  if (!token || !activeSessions[token]) {
+    return res.status(401).json({ error: 'Unauthorized.' });
+  }
+
+  res.json({
+    widgets: dashboardState.widgets,
+    users: Object.values(activeSessions),
+    me: activeSessions[token]
+  });
+});
+
+app.post('/api/logout', (req, res) => {
+  const token = req.body?.token;
+  if (token && activeSessions[token]) {
+    delete activeSessions[token];
+  }
+
+  res.json({ ok: true });
+});
+
+io.on('connection', (socket) => {
+  const authToken = socket.handshake.auth?.token || '';
+
+  if (authToken && activeSessions[authToken]) {
+    socket.user = activeSessions[authToken];
+    socket.join('dashboard');
+  }
+
+  socket.on('join-dashboard', ({ token }) => {
+    const sessionToken = token || socket.handshake.auth?.token || '';
+    const user = activeSessions[sessionToken];
+
+    if (!user) {
+      socket.emit('auth-error', { message: 'Invalid session.' });
+      return;
+    }
+
+    socket.user = user;
+    socket.join('dashboard');
+    socket.emit('dashboard-state', {
+      widgets: dashboardState.widgets,
+      users: Object.values(activeSessions)
+    });
+    io.to('dashboard').emit('presence', { users: Object.values(activeSessions) });
+  });
+
+  socket.on('dashboard-update', ({ widgets }) => {
+    if (!socket.user) {
+      return;
+    }
+
+    if (!Array.isArray(widgets)) {
+      return;
+    }
+
+    dashboardState.widgets = widgets.map((widget) => ({
+      ...widget,
+      updatedBy: socket.user.username
+    }));
+
+    broadcastState();
+  });
+
+  socket.on('disconnect', () => {
+    if (socket.user) {
+      io.to('dashboard').emit('presence', { users: Object.values(activeSessions) });
+    }
+  });
+});
+
+server.listen(PORT, () => {
+  console.log(`Collaborative dashboard running on http://localhost:${PORT}`);
+});
