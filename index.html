@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Collaborative Dashboard</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1a1f35 100%);
+      color: #e5e7eb;
+      overflow: hidden;
+    }
+
+    #app {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 16px 24px;
+      background: rgba(15, 23, 42, 0.95);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+      backdrop-filter: blur(10px);
+      flex-wrap: wrap;
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .topbar-left h1 {
+      font-size: 1.3rem;
+      margin: 0;
+      background: linear-gradient(135deg, #7c9cff, #5ec8ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      padding: 10px 16px;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #7c9cff 0%, #5ec8ff 100%);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+      box-shadow: 0 8px 16px rgba(124, 156, 255, 0.3);
+    }
+
+    .btn-secondary {
+      background: rgba(148, 163, 184, 0.12);
+      color: #cbd5e1;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(148, 163, 184, 0.18);
+    }
+
+    .btn-icon {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      background: rgba(148, 163, 184, 0.08);
+      border: 1px solid rgba(148, 163, 184, 0.15);
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn-icon:hover {
+      background: rgba(148, 163, 184, 0.15);
+    }
+
+    .dashboard-area {
+      flex: 1;
+      position: relative;
+      overflow: auto;
+      background: radial-gradient(circle at 20% 50%, rgba(124, 156, 255, 0.08) 0%, transparent 50%),
+                  linear-gradient(135deg, #0f172a 0%, #1a1f35 100%);
+    }
+
+    .widget {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95));
+      border: 1px solid rgba(148, 163, 184, 0.15);
+      border-radius: 14px;
+      border-left: 4px solid;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.4);
+      min-width: 220px;
+      min-height: 150px;
+      overflow: hidden;
+      resize: both;
+      touch-action: none;
+      transition: box-shadow 0.2s ease;
+    }
+
+    .widget.dragging {
+      opacity: 0.95;
+      box-shadow: 0 15px 40px rgba(124, 156, 255, 0.3);
+    }
+
+    .widget-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px 10px;
+      background: rgba(15, 23, 42, 0.3);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+      cursor: grab;
+      user-select: none;
+    }
+
+    .widget-header:active {
+      cursor: grabbing;
+    }
+
+    .widget-title {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: #f8fafc;
+      font-weight: 700;
+      font-size: 0.95rem;
+      padding: 0;
+      font-family: inherit;
+      cursor: text;
+    }
+
+    .widget-title:focus {
+      outline: none;
+      background: rgba(124, 156, 255, 0.15);
+      border-radius: 6px;
+      padding: 2px 6px;
+    }
+
+    .widget-content {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: #cbd5e1;
+      padding: 12px 14px;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      font-family: inherit;
+      resize: none;
+      overflow-y: auto;
+    }
+
+    .widget-content:focus {
+      outline: none;
+      color: #e5e7eb;
+    }
+
+    .widget-content::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .widget-content::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.2);
+      border-radius: 3px;
+    }
+
+    .widget-footer {
+      padding: 8px 14px;
+      font-size: 0.75rem;
+      color: #64748b;
+      border-top: 1px solid rgba(148, 163, 184, 0.08);
+    }
+
+    .empty-state {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      flex-direction: column;
+      gap: 16px;
+      color: #64748b;
+      text-align: center;
+      padding: 40px;
+    }
+
+    .empty-state-icon {
+      font-size: 4rem;
+      opacity: 0.5;
+    }
+
+    @media (max-width: 768px) {
+      .topbar {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .topbar-left {
+        width: 100%;
+      }
+
+      .topbar-right {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="topbar">
+      <div class="topbar-left">
+        <h1>📊 Dashboard</h1>
+      </div>
+      <div class="topbar-right">
+        <button id="add-widget-btn" class="btn btn-primary">+ Add Widget</button>
+        <button id="clear-all-btn" class="btn btn-secondary">Clear All</button>
+        <button id="export-btn" class="btn btn-secondary">Export</button>
+      </div>
+    </div>
+
+    <div id="dashboard-area" class="dashboard-area"></div>
+  </div>
+
+  <script>
+    const dashboardArea = document.getElementById('dashboard-area');
+    const addWidgetBtn = document.getElementById('add-widget-btn');
+    const clearAllBtn = document.getElementById('clear-all-btn');
+    const exportBtn = document.getElementById('export-btn');
+
+    const colors = ['#7c9cff', '#5ec8ff', '#53d8a2', '#ffc857', '#ff8a65', '#aa8fd8', '#f7b267', '#f4d35e'];
+
+    let widgets = JSON.parse(localStorage.getItem('dashboardWidgets')) || [
+      {
+        id: 'welcome-1',
+        title: 'Welcome to Dashboard',
+        content: 'This is a static collaborative dashboard. You can:\n\n• Add new widgets\n• Edit titles and content\n• Drag widgets around\n• Resize widgets\n• Save data in localStorage\n• Export your dashboard',
+        x: 40,
+        y: 40,
+        width: 320,
+        height: 240,
+        color: '#7c9cff'
+      },
+      {
+        id: 'tips-1',
+        title: 'Pro Tips',
+        content: '💡 Click the header to drag\n💡 Resize by dragging corners\n💡 Click × to delete widgets\n💡 Changes are saved automatically\n💡 Share dashboard by exporting',
+        x: 400,
+        y: 100,
+        width: 300,
+        height: 220,
+        color: '#53d8a2'
+      }
+    ];
+
+    function saveWidgets() {
+      localStorage.setItem('dashboardWidgets', JSON.stringify(widgets));
+    }
+
+    function getRandomColor() {
+      return colors[Math.floor(Math.random() * colors.length)];
+    }
+
+    function renderWidgets() {
+      dashboardArea.innerHTML = '';
+
+      if (widgets.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.innerHTML = `
+          <div class="empty-state-icon">📋</div>
+          <div>No widgets yet</div>
+          <div style="font-size: 0.85rem; color: #475569;">Click "+ Add Widget" to get started</div>
+        `;
+        dashboardArea.appendChild(empty);
+        return;
+      }
+
+      widgets.forEach((widget) => {
+        const el = document.createElement('div');
+        el.className = 'widget';
+        el.style.left = `${widget.x}px`;
+        el.style.top = `${widget.y}px`;
+        el.style.width = `${widget.width}px`;
+        el.style.height = `${widget.height}px`;
+        el.style.borderLeftColor = widget.color;
+        el.dataset.id = widget.id;
+
+        const header = document.createElement('div');
+        header.className = 'widget-header';
+
+        const titleInput = document.createElement('input');
+        titleInput.type = 'text';
+        titleInput.className = 'widget-title';
+        titleInput.value = widget.title || '';
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn btn-icon';
+        deleteBtn.textContent = '×';
+        deleteBtn.style.fontSize = '1.5rem';
+        deleteBtn.style.lineHeight = '1';
+        deleteBtn.title = 'Delete widget';
+
+        header.appendChild(titleInput);
+        header.appendChild(deleteBtn);
+
+        const content = document.createElement('textarea');
+        content.className = 'widget-content';
+        content.value = widget.content || '';
+
+        const footer = document.createElement('div');
+        footer.className = 'widget-footer';
+        footer.textContent = `Created: ${new Date(widget.createdAt || Date.now()).toLocaleDateString()}`;
+
+        el.appendChild(header);
+        el.appendChild(content);
+        el.appendChild(footer);
+
+        dashboardArea.appendChild(el);
+
+        // Title change
+        titleInput.addEventListener('input', () => {
+          widget.title = titleInput.value;
+          saveWidgets();
+        });
+
+        // Content change
+        content.addEventListener('input', () => {
+          widget.content = content.value;
+          saveWidgets();
+        });
+
+        // Delete
+        deleteBtn.addEventListener('click', () => {
+          widgets = widgets.filter(w => w.id !== widget.id);
+          saveWidgets();
+          renderWidgets();
+        });
+
+        // Drag
+        let isDragging = false;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+
+        header.addEventListener('pointerdown', (e) => {
+          if (e.target.closest('input') || e.target.closest('button')) return;
+          isDragging = true;
+          dragOffsetX = e.clientX - widget.x;
+          dragOffsetY = e.clientY - widget.y;
+          el.classList.add('dragging');
+        });
+
+        document.addEventListener('pointermove', (e) => {
+          if (!isDragging) return;
+          widget.x = Math.max(0, e.clientX - dragOffsetX);
+          widget.y = Math.max(0, e.clientY - dragOffsetY);
+          el.style.left = `${widget.x}px`;
+          el.style.top = `${widget.y}px`;
+        });
+
+        document.addEventListener('pointerup', () => {
+          if (isDragging) {
+            isDragging = false;
+            el.classList.remove('dragging');
+            saveWidgets();
+          }
+        });
+
+        // Track resize
+        const observer = new ResizeObserver(() => {
+          const rect = el.getBoundingClientRect();
+          widget.width = Math.max(220, rect.width);
+          widget.height = Math.max(150, rect.height);
+          saveWidgets();
+        });
+        observer.observe(el);
+      });
+    }
+
+    function addWidget() {
+      const newWidget = {
+        id: `widget-${Date.now()}`,
+        title: `Widget ${widgets.length + 1}`,
+        content: 'Click to edit content',
+        x: 60 + Math.random() * 200,
+        y: 60 + Math.random() * 200,
+        width: 300,
+        height: 220,
+        color: getRandomColor(),
+        createdAt: Date.now()
+      };
+      widgets.push(newWidget);
+      saveWidgets();
+      renderWidgets();
+    }
+
+    function clearAll() {
+      if (confirm('Are you sure? This will delete all widgets.')) {
+        widgets = [];
+        saveWidgets();
+        renderWidgets();
+      }
+    }
+
+    function exportDashboard() {
+      const data = {
+        exported: new Date().toISOString(),
+        widgets: widgets
+      };
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dashboard-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    addWidgetBtn.addEventListener('click', addWidget);
+    clearAllBtn.addEventListener('click', clearAll);
+    exportBtn.addEventListener('click', exportDashboard);
+
+    renderWidgets();
+  </script>
+</body>
+</html>
